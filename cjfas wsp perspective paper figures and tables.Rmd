@@ -1,0 +1,136 @@
+---
+title: "R Notebook"
+output: html_notebook
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+library(tidyverse)
+library(PNWColors)
+library(readxl)
+library(data.table)
+options(scipen=10000)
+```
+
+# Rapid Status Assessment Status
+# Data provided by Sue Grant, DFO, State of the Salmon Program
+
+```{r read RSA status data}
+#read status assessment data
+
+data<-read_xlsx("data/Salmon CUs and DFO WSP Status Assessments V2 (Sgrant Nov 5 2024).xlsx",sheet="Used as FINAL")
+
+```
+
+```{r status category figures}
+#assign color scheme
+pal1 <- pnw_palette(name="Cascades",n = 3,type = "discrete")
+pal2 <- pnw_palette(name="Cascades",n = 5,type = "discrete")
+
+fig1<-data%>%
+  group_by(Species,`WSP Rapid Status`)%>%
+  summarise(n=n())%>%
+    mutate(`WSP Rapid Status`=ifelse(`WSP Rapid Status`=="NA","Not Assessed",`WSP Rapid Status`))
+
+#total number of CUs in database
+sum(fig1$n)
+
+#fugure showing assessment status summary by species
+ggplot(fig1,aes(x=Species,y=n,fill=`WSP Rapid Status`)) +
+  geom_col(position="dodge") +
+  scale_fill_manual(values=pal1) +
+  geom_text(aes(label=n), position=position_dodge(width=0.9), vjust=-0.25, size = 5) +
+  theme_classic(24) +
+  theme(legend.position="bottom") +
+  ylab("Number of Conservation Units")
+
+ggsave("figures/cus assessment status by species.png",dpi=1000,height=9,width=12)
+
+#summarise by status assessment status over all species
+cusbycategory%>%group_by(`WSP Rapid Status`)%>%summarise(n=sum(n))
+
+fig2<-data%>%
+  group_by(`WSP Rapid Status`)%>%
+  summarise(n=n())%>%
+  mutate(`WSP Rapid Status`=ifelse(`WSP Rapid Status`=="NA","Not Assessed",`WSP Rapid Status`))
+
+#figure of number of cus in which assessment category
+ggplot(fig2,aes(y=n,x=`WSP Rapid Status`,fill=`WSP Rapid Status`))+
+  geom_col(position="dodge")+
+  scale_fill_manual(values=pal2) +
+  geom_text(aes(label=n), position=position_dodge(width=0.9), vjust=-0.25)+
+  theme_bw()+
+  theme(legend.position="bottom")+
+  labs(y="Number of Conservation Units")
+
+#ggsave("figures/cus assessment status.png",dpi=600,height=5,width=5)
+
+
+```
+
+# Summary of SEP Production Plan for 2025
+# Downloaded from DFO Website
+
+```{r 2025 enhancement production plan summary}
+#read 2025 production plan
+data<-read.csv("data/2025 pp.csv")
+
+obj<-data%>%filter(Production.Strategy.Level=="Primary")%>%
+  select(Species,Release..Transfer.Stage,Release..Transfer.Target,Objective)%>%
+  mutate(Release=as.numeric(Release..Transfer.Target))
+
+#summary table of total releases all release stages by species x objective
+tab.obj<-obj%>%group_by(Species,Objective)%>%
+  summarise(Total=sum(Release,na.rm=TRUE))
+
+#figure of total releases by species by objective
+ggplot(tab.obj,aes(x=Objective,y=Total/10^6,fill=Objective))+
+  geom_col()+
+  facet_grid(Species~.,scale="free_y")+
+  theme_bw()+
+  labs(y="Releases (millions)")+
+  theme(axis.text.x=element_text(angle=45,hjust=1))
+
+#ggsave("figures/hatchery production pp2025.png",dpi=600,height=6,width=6)
+
+```
+
+# Table of Data Deficient CUs
+# Source: PSF Pacific Salmon Explorer biological status dataset
+
+```{r read data}
+data<-fread("data/dataset101_biological_status.csv")
+
+```
+
+```{r process and create table of data deficient CUs by species and region}
+#process data for total number of data deficient CUs in dataset by region and species
+num.dd<-data%>%select(region,species_name,psf_status)%>%
+  filter(psf_status=="data-deficient")%>%
+   filter(species_name!="Steelhead")%>%
+  group_by(region,species_name)%>%
+  summarise(n=n())%>%
+  pivot_wider(names_from="species_name",values_from="n")
+
+num.dd$total<-rowSums(num.dd[2:6],na.rm=TRUE)
+
+#write.csv(num.dd,"number of dd cus.csv",row.names = FALSE)
+
+#process data for total number of CUs in dataset by region and species
+num.cus<-data%>%select(region,species_name,psf_status)%>%
+  group_by(region,species_name)%>%
+  summarise(n=n())%>%
+  filter(species_name!="Steelhead")%>%
+  pivot_wider(names_from="species_name",values_from="n")
+
+#total number of CUs by species and region
+num.cus$total<-rowSums(num.cus[2:6],na.rm=TRUE)
+
+num.cus
+
+#write.csv(num.cus,"number of cus.csv",row.names = FALSE)
+
+```
+
+
